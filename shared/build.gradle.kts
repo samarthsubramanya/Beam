@@ -52,6 +52,7 @@ kotlin {
         jvmMain.dependencies {
             implementation(libs.sqldelight.jvm.driver)
             implementation(libs.jmdns)
+            implementation(libs.ktor.client.okhttp)
         }
         commonMain.dependencies {
             implementation(libs.compose.runtime)
@@ -70,6 +71,7 @@ kotlin {
             implementation(libs.ktor.serialization.kotlinx.json)
             implementation(libs.ktor.server.core)
             implementation(libs.ktor.server.cio)
+            implementation(libs.ktor.server.content.negotiation)
 
             implementation(libs.coil.compose)
             implementation(libs.coil.network.ktor)

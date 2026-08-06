@@ -22,3 +22,5 @@ interface DiscoveryService {
     fun start(localDeviceId: String, localDeviceName: String, servicePort: Int)
     fun stop()
 }
+
+expect fun createDiscoveryService(): DiscoveryService

@@ -1,20 +1,40 @@
 package com.beam.app
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import com.beam.app.discovery.Peer
+import com.beam.app.discovery.createDiscoveryService
+import com.beam.app.transport.TextTransportServer
+import com.beam.app.transport.sendText
+import com.beam.app.transport.setClipboardText
+import kotlin.random.Random
+import kotlinx.coroutines.launch
 
 /**
- * Root composable for Beam. Placeholder home screen — replaced by the
- * device-radar UI in Phase 5.
+ * Root composable for Beam. Currently just a discovery debug screen — replaced
+ * by the real device-radar UI in Phase 5. Proves LAN discovery works end to end.
  */
 @Composable
 fun App() {
@@ -22,8 +42,54 @@ fun App() {
         colorScheme = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()
     ) {
         Surface {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Beam")
+            DiscoveryDebugScreen()
+        }
+    }
+}
+
+private const val DEBUG_PORT = 53212
+
+@Composable
+private fun DiscoveryDebugScreen() {
+    val scope = rememberCoroutineScope()
+    val service = remember { createDiscoveryService() }
+    val deviceName = remember { "Beam-${Random.nextInt(1000, 9999)}" }
+    val peers by service.peers.collectAsState()
+
+    var message by remember { mutableStateOf("") }
+    var lastReceived by remember { mutableStateOf("(nothing yet)") }
+
+    DisposableEffect(Unit) {
+        val server = TextTransportServer { payload ->
+            lastReceived = "${payload.senderName}: ${payload.content}"
+            setClipboardText(payload.content)
+        }
+        server.start(DEBUG_PORT)
+        service.start(localDeviceId = deviceName, localDeviceName = deviceName, servicePort = DEBUG_PORT)
+        onDispose {
+            service.stop()
+            server.stop()
+        }
+    }
+
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Text("This device: $deviceName")
+        Text("Last received (auto-copied to clipboard): $lastReceived")
+        OutlinedTextField(
+            value = message,
+            onValueChange = { message = it },
+            label = { Text("Message to send") },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Text("Tap a peer below to send it:")
+        LazyColumn {
+            items(peers) { peer: Peer ->
+                Text(
+                    "${peer.name} — ${peer.host}:${peer.port}",
+                    modifier = Modifier.fillMaxWidth().clickable {
+                        scope.launch { sendText(peer, deviceName, message) }
+                    },
+                )
             }
         }
     }
