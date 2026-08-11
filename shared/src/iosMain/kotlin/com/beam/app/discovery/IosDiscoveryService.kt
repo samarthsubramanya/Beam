@@ -120,12 +120,12 @@ private fun NSNetService.txtRecordId(): String? {
 }
 
 @OptIn(ExperimentalForeignApi::class, kotlinx.cinterop.BetaInteropApi::class)
-private fun ByteArray.toNSData(): NSData = usePinned { pinned ->
+internal fun ByteArray.toNSData(): NSData = usePinned { pinned ->
     NSData.create(bytes = pinned.addressOf(0), length = size.convert())
 }
 
 @OptIn(ExperimentalForeignApi::class)
-private fun NSData.toByteArray(): ByteArray {
+internal fun NSData.toByteArray(): ByteArray {
     val size = length.toInt()
     val result = ByteArray(size)
     if (size > 0) {

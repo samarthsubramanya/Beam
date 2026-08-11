@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -26,7 +27,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.beam.app.discovery.Peer
 import com.beam.app.discovery.createDiscoveryService
-import com.beam.app.transport.TextTransportServer
+import com.beam.app.transport.PlatformFile
+import com.beam.app.transport.TransportServer
+import com.beam.app.transport.rememberFilePicker
+import com.beam.app.transport.saveToDownloads
+import com.beam.app.transport.sendFile
 import com.beam.app.transport.sendText
 import com.beam.app.transport.setClipboardText
 import kotlin.random.Random
@@ -58,12 +63,19 @@ private fun DiscoveryDebugScreen() {
 
     var message by remember { mutableStateOf("") }
     var lastReceived by remember { mutableStateOf("(nothing yet)") }
+    var pickedFile by remember { mutableStateOf<PlatformFile?>(null) }
 
     DisposableEffect(Unit) {
-        val server = TextTransportServer { payload ->
-            lastReceived = "${payload.senderName}: ${payload.content}"
-            setClipboardText(payload.content)
-        }
+        val server = TransportServer(
+            onTextReceived = { payload ->
+                lastReceived = "text from ${payload.senderName}: ${payload.content}"
+                setClipboardText(payload.content)
+            },
+            onFileReceived = { file ->
+                val path = saveToDownloads(file.filename, file.bytes)
+                lastReceived = "file from ${file.senderName}: ${file.filename} -> $path"
+            },
+        )
         server.start(DEBUG_PORT)
         service.start(localDeviceId = deviceName, localDeviceName = deviceName, servicePort = DEBUG_PORT)
         onDispose {
@@ -72,22 +84,30 @@ private fun DiscoveryDebugScreen() {
         }
     }
 
+    val pickFile = rememberFilePicker { pickedFile = it }
+
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Text("This device: $deviceName")
-        Text("Last received (auto-copied to clipboard): $lastReceived")
+        Text("Last received: $lastReceived")
         OutlinedTextField(
             value = message,
             onValueChange = { message = it },
             label = { Text("Message to send") },
             modifier = Modifier.fillMaxWidth(),
         )
-        Text("Tap a peer below to send it:")
+        Button(onClick = pickFile) {
+            Text(pickedFile?.let { "File picked: ${it.name}" } ?: "Pick a file to send instead")
+        }
+        Text("Tap a peer below to send the message, or the picked file if one is selected:")
         LazyColumn {
             items(peers) { peer: Peer ->
                 Text(
                     "${peer.name} — ${peer.host}:${peer.port}",
                     modifier = Modifier.fillMaxWidth().clickable {
-                        scope.launch { sendText(peer, deviceName, message) }
+                        val file = pickedFile
+                        scope.launch {
+                            if (file != null) sendFile(peer, deviceName, file) else sendText(peer, deviceName, message)
+                        }
                     },
                 )
             }
