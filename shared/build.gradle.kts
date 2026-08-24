@@ -7,6 +7,7 @@ plugins {
     alias(libs.plugins.composeCompiler)
     alias(libs.plugins.kotlinxSerialization)
     alias(libs.plugins.sqldelight)
+    alias(libs.plugins.aboutLibraries)
 }
 
 kotlin {
@@ -92,6 +93,9 @@ kotlin {
             implementation(libs.sqldelight.runtime)
             implementation(libs.okio)
             implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.0")
+
+            implementation(libs.aboutlibraries.core)
+            implementation(libs.aboutlibraries.compose.m3)
         }
     }
 }
@@ -102,6 +106,13 @@ sqldelight {
             packageName.set("com.beam.db")
             srcDirs.setFrom("src/commonMain/sqldelight")
         }
+    }
+}
+
+aboutLibraries {
+    export {
+        outputFile = file("src/commonMain/composeResources/files/aboutlibraries.json")
+        prettyPrint = true
     }
 }
 

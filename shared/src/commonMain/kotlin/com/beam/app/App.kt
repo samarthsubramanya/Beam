@@ -1,48 +1,17 @@
 package com.beam.app
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Done
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CenterAlignedTopAppBar
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledIconButton
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -52,15 +21,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
 import com.beam.app.db.BeamRepository
 import com.beam.app.db.DatabaseDriverFactory
 import com.beam.app.db.TransferEntry
-import com.beam.app.discovery.Peer
 import com.beam.app.discovery.createDiscoveryService
 import com.beam.app.pairing.PairingManager
 import com.beam.app.theme.BeamTheme
@@ -73,37 +39,43 @@ import com.beam.app.transport.saveToDownloads
 import com.beam.app.transport.sendFile
 import com.beam.app.transport.sendText
 import com.beam.app.transport.setClipboardText
+import com.beam.app.ui.FileTransferScreen
+import com.beam.app.ui.HomeScreen
+import com.beam.app.ui.LicensesScreen
+import com.beam.app.ui.MessageScreen
+import com.beam.app.ui.PairingScreen
+import com.beam.app.ui.SettingsScreen
 import kotlin.random.Random
 import kotlinx.coroutines.launch
 
 private const val PORT = 53212
+private const val SLIDE_MS = 300
 
 @Composable
 fun App() {
     BeamTheme {
         Surface(color = MaterialTheme.colorScheme.background) {
-            HomeScreen()
+            BeamNavHost()
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun HomeScreen() {
+private fun BeamNavHost() {
     val scope = rememberCoroutineScope()
-    val service = remember { createDiscoveryService() }
+    val navController = rememberNavController()
+    val discovery = remember { createDiscoveryService() }
     val deviceId = remember { "Beam-${Random.nextInt(1000, 9999)}" }
     val repository = remember { BeamRepository(DatabaseDriverFactory()) }
     val pairingManager = remember { PairingManager() }
-    val peers by service.peers.collectAsState()
+    val peers by discovery.peers.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
-    var message by remember { mutableStateOf("") }
-    var pickedFile by remember { mutableStateOf<PlatformFile?>(null) }
-    var myPin by remember { mutableStateOf<String?>(null) }
-    var showPinDialog by remember { mutableStateOf(false) }
-    var pairingTarget by remember { mutableStateOf<Peer?>(null) }
     var pairedIds by remember { mutableStateOf(setOf<String>()) }
+    var myPin by remember { mutableStateOf<String?>(null) }
+    var pickedFile by remember { mutableStateOf<PlatformFile?>(null) }
+    var selectedPeerId by remember { mutableStateOf<String?>(null) }
+    val selectedPeer = peers.firstOrNull { it.id == selectedPeerId }
 
     suspend fun refreshPaired() {
         pairedIds = repository.pairedDeviceIds()
@@ -135,9 +107,9 @@ private fun HomeScreen() {
             },
         )
         server.start(PORT)
-        service.start(localDeviceId = deviceId, localDeviceName = deviceId, servicePort = PORT)
+        discovery.start(localDeviceId = deviceId, localDeviceName = deviceId, servicePort = PORT)
         onDispose {
-            service.stop()
+            discovery.stop()
             server.stop()
         }
     }
@@ -147,284 +119,93 @@ private fun HomeScreen() {
     val pickFile = rememberFilePicker { pickedFile = it }
 
     Scaffold(
-        topBar = {
-            CenterAlignedTopAppBar(
-                title = {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Beam", style = MaterialTheme.typography.titleLarge)
-                        Text(
-                            deviceId,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { showPinDialog = true }) {
-                        Icon(Icons.Filled.Lock, contentDescription = "Show pairing PIN")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                ),
-            )
-        },
-        snackbarHost = {
-            SnackbarHost(snackbarHostState) { data ->
-                Snackbar(snackbarData = data)
-            }
-        },
+        snackbarHost = { SnackbarHost(snackbarHostState) { data -> Snackbar(snackbarData = data) } },
     ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding)) {
-            ComposeBar(
-                message = message,
-                onMessageChange = { message = it },
-                pickedFile = pickedFile,
-                onPickFile = pickFile,
-                onClearFile = { pickedFile = null },
-            )
-
-            Text(
-                if (peers.isEmpty()) "" else "${peers.size} device${if (peers.size == 1) "" else "s"} nearby",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-            )
-
-            if (peers.isEmpty()) {
-                EmptyState()
-            } else {
-                LazyColumn(Modifier.weight(1f)) {
-                    items(peers) { peer ->
-                        PeerCard(
-                            peer = peer,
-                            isPaired = peer.id in pairedIds,
-                            canSend = message.isNotBlank() || pickedFile != null,
-                            onPairClick = { pairingTarget = peer },
-                            onSendClick = {
-                                val file = pickedFile
-                                scope.launch {
-                                    if (file != null) {
-                                        sendFile(peer, deviceId, deviceId, file)
-                                        repository.recordHistory(
-                                            TransferEntry(peer.name, "sent", "file", file.name, nowMillis())
-                                        )
-                                    } else {
-                                        sendText(peer, deviceId, deviceId, message)
-                                        repository.recordHistory(
-                                            TransferEntry(peer.name, "sent", "text", message, nowMillis())
-                                        )
-                                    }
-                                    snackbarHostState.showSnackbar("Sent to ${peer.name}")
-                                }
-                            },
-                        )
-                    }
-                }
-            }
-        }
-    }
-
-    if (showPinDialog) {
-        PinDialog(
-            pin = myPin,
-            onGenerate = { myPin = pairingManager.generatePin() },
-            onDismiss = { showPinDialog = false },
-        )
-    }
-
-    pairingTarget?.let { target ->
-        PairDialog(
-            peerName = target.name,
-            onConfirm = { pin ->
-                scope.launch {
-                    val result = pairWith(target, deviceId, deviceId, pin)
-                    if (result != null) {
-                        repository.addPairedDevice(result.deviceId, result.deviceName, nowMillis())
-                        refreshPaired()
-                        snackbarHostState.showSnackbar("Paired with ${target.name}")
-                    } else {
-                        snackbarHostState.showSnackbar("Wrong PIN — try again")
-                    }
-                }
-                pairingTarget = null
+        NavHost(
+            navController = navController,
+            startDestination = "home",
+            modifier = androidx.compose.ui.Modifier.padding(padding),
+            enterTransition = {
+                slideInHorizontally(animationSpec = tween(SLIDE_MS), initialOffsetX = { it }) + fadeIn()
             },
-            onDismiss = { pairingTarget = null },
-        )
-    }
-}
-
-@Composable
-private fun ComposeBar(
-    message: String,
-    onMessageChange: (String) -> Unit,
-    pickedFile: PlatformFile?,
-    onPickFile: () -> Unit,
-    onClearFile: () -> Unit,
-) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(
-                value = message,
-                onValueChange = onMessageChange,
-                placeholder = { Text("Message to send") },
-                modifier = Modifier.weight(1f),
-                singleLine = true,
-            )
-            Spacer(Modifier.size(8.dp))
-            FilledIconButton(onClick = onPickFile) {
-                Icon(Icons.Filled.Add, contentDescription = "Attach a file")
-            }
-        }
-        pickedFile?.let { file ->
-            Row(
-                Modifier.padding(top = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Text(
-                    "File ready: ${file.name}",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                IconButton(onClick = onClearFile, modifier = Modifier.size(20.dp)) {
-                    Icon(Icons.Filled.Close, contentDescription = "Clear picked file")
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun EmptyState() {
-    Column(
-        Modifier.fillMaxSize().padding(32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-        Spacer(Modifier.height(16.dp))
-        Icon(
-            Icons.Filled.Search,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(32.dp),
-        )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            "Searching for devices on your network…",
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-        )
-    }
-}
-
-@Composable
-private fun PeerCard(
-    peer: Peer,
-    isPaired: Boolean,
-    canSend: Boolean,
-    onPairClick: () -> Unit,
-    onSendClick: () -> Unit,
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
-        shape = MaterialTheme.shapes.medium,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-    ) {
-        Row(
-            Modifier.fillMaxWidth().padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
+            exitTransition = {
+                slideOutHorizontally(animationSpec = tween(SLIDE_MS), targetOffsetX = { -it / 4 }) + fadeOut()
+            },
+            popEnterTransition = {
+                slideInHorizontally(animationSpec = tween(SLIDE_MS), initialOffsetX = { -it / 4 }) + fadeIn()
+            },
+            popExitTransition = {
+                slideOutHorizontally(animationSpec = tween(SLIDE_MS), targetOffsetX = { it }) + fadeOut()
+            },
         ) {
-            Box(
-                Modifier.size(40.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    Icons.Filled.Person,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+            composable("home") {
+                HomeScreen(
+                    peers = peers,
+                    pairedIds = pairedIds,
+                    deviceId = deviceId,
+                    onSelectUnpaired = { peer -> selectedPeerId = peer.id; navController.navigate("pairing") },
+                    onOpenMessage = { peer -> selectedPeerId = peer.id; navController.navigate("message") },
+                    onOpenFiles = { peer -> selectedPeerId = peer.id; navController.navigate("files") },
+                    onOpenSettings = { navController.navigate("settings") },
                 )
             }
-            Spacer(Modifier.size(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(peer.name, style = MaterialTheme.typography.titleMedium)
-                Text(
-                    "${peer.host}:${peer.port}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+            composable("pairing") {
+                PairingScreen(
+                    peer = selectedPeer,
+                    myPin = myPin,
+                    onGeneratePin = { myPin = pairingManager.generatePin() },
+                    onAttemptPair = attempt@{ pin ->
+                        val target = selectedPeer ?: return@attempt false
+                        val result = pairWith(target, deviceId, deviceId, pin)
+                        if (result != null) {
+                            repository.addPairedDevice(result.deviceId, result.deviceName, nowMillis())
+                            refreshPaired()
+                            snackbarHostState.showSnackbar("Paired with ${target.name}")
+                            true
+                        } else {
+                            false
+                        }
+                    },
+                    onBack = { navController.popBackStack() },
                 )
             }
-            if (isPaired) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Filled.Done,
-                        contentDescription = "Paired",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Spacer(Modifier.size(8.dp))
-                    FilledIconButton(onClick = onSendClick, enabled = canSend) {
-                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send")
-                    }
-                }
-            } else {
-                FilledTonalButton(onClick = onPairClick) {
-                    Text("Pair")
-                }
+            composable("message") {
+                MessageScreen(
+                    peer = selectedPeer,
+                    onSend = send@{ text ->
+                        val target = selectedPeer ?: return@send
+                        sendText(target, deviceId, deviceId, text)
+                        repository.recordHistory(TransferEntry(target.name, "sent", "text", text, nowMillis()))
+                        snackbarHostState.showSnackbar("Sent to ${target.name}")
+                    },
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            composable("files") {
+                FileTransferScreen(
+                    peer = selectedPeer,
+                    pickFile = pickFile,
+                    pickedFile = pickedFile,
+                    onSend = send@{ file ->
+                        val target = selectedPeer ?: return@send
+                        sendFile(target, deviceId, deviceId, file)
+                        repository.recordHistory(TransferEntry(target.name, "sent", "file", file.name, nowMillis()))
+                        snackbarHostState.showSnackbar("Sent to ${target.name}")
+                        pickedFile = null
+                    },
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            composable("settings") {
+                SettingsScreen(
+                    deviceId = deviceId,
+                    onOpenLicenses = { navController.navigate("licenses") },
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            composable("licenses") {
+                LicensesScreen(onBack = { navController.popBackStack() })
             }
         }
     }
-}
-
-@Composable
-private fun PinDialog(pin: String?, onGenerate: () -> Unit, onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Your pairing PIN") },
-        text = {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    "Share this with a device you want to pair — they'll type it in to trust you.",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                if (pin != null) {
-                    Spacer(Modifier.height(16.dp))
-                    Text(pin, style = MaterialTheme.typography.displaySmall)
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onGenerate) { Text(if (pin == null) "Generate" else "Regenerate") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Done") }
-        },
-    )
-}
-
-@Composable
-private fun PairDialog(peerName: String, onConfirm: (String) -> Unit, onDismiss: () -> Unit) {
-    var pin by remember { mutableStateOf("") }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Pair with $peerName") },
-        text = {
-            OutlinedTextField(
-                value = pin,
-                onValueChange = { pin = it },
-                label = { Text("PIN shown on that device") },
-                singleLine = true,
-            )
-        },
-        confirmButton = {
-            Button(onClick = { onConfirm(pin) }, enabled = pin.isNotBlank()) { Text("Pair") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
-        },
-    )
 }
