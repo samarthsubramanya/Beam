@@ -1,15 +1,20 @@
 package com.beam.app.transport
 
+import com.beam.app.db.BeamRepository
 import com.beam.app.discovery.Peer
+import com.beam.app.pairing.PairingManager
 import io.ktor.client.HttpClient
+import io.ktor.client.call.body
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
+import io.ktor.client.statement.HttpResponse
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
+import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
 import io.ktor.server.application.install
 import io.ktor.server.cio.CIO
@@ -27,8 +32,25 @@ data class TextPayload(val senderName: String, val content: String)
 
 data class ReceivedFile(val senderName: String, val filename: String, val bytes: ByteArray)
 
-/** Receives text and file sends from other Beam devices on the LAN. One per app process — both routes share one port. */
+@Serializable
+data class PairRequest(val deviceId: String, val deviceName: String, val pin: String)
+
+@Serializable
+data class PairResponse(val deviceId: String, val deviceName: String)
+
+private const val DEVICE_ID_HEADER = "X-Device-Id"
+private const val DEVICE_NAME_HEADER = "X-Device-Name"
+
+/**
+ * Receives pairing, text, and file requests from other Beam devices on the LAN.
+ * One per app process — all routes share one port. /text and /file are gated to
+ * already-paired device ids; pair first via /pair.
+ */
 class TransportServer(
+    private val repository: BeamRepository,
+    private val pairingManager: PairingManager,
+    private val localDeviceId: String,
+    private val localDeviceName: String,
     private val onTextReceived: (TextPayload) -> Unit,
     private val onFileReceived: (ReceivedFile) -> Unit,
 ) {
@@ -38,18 +60,38 @@ class TransportServer(
         server = embeddedServer(CIO, port = port) {
             install(ServerContentNegotiation) { json() }
             routing {
+                post("/pair") {
+                    val request = call.receive<PairRequest>()
+                    if (pairingManager.verifyAndConsume(request.pin)) {
+                        repository.addPairedDevice(request.deviceId, request.deviceName, nowMillis())
+                        call.respond(PairResponse(localDeviceId, localDeviceName))
+                    } else {
+                        call.respond(HttpStatusCode.Forbidden)
+                    }
+                }
                 post("/text") {
+                    if (!requirePaired(call)) return@post
                     onTextReceived(call.receive<TextPayload>())
                     call.respond(HttpStatusCode.OK)
                 }
                 post("/file") {
+                    if (!requirePaired(call)) return@post
                     val filename = call.request.headers["X-Filename"] ?: "unnamed"
-                    val sender = call.request.headers["X-Sender"] ?: "unknown"
+                    val sender = call.request.headers[DEVICE_NAME_HEADER] ?: "unknown"
                     onFileReceived(ReceivedFile(sender, filename, call.receive<ByteArray>()))
                     call.respond(HttpStatusCode.OK)
                 }
             }
         }.start(wait = false)
+    }
+
+    private suspend fun requirePaired(call: ApplicationCall): Boolean {
+        val deviceId = call.request.headers[DEVICE_ID_HEADER]
+        if (deviceId == null || !repository.isPaired(deviceId)) {
+            call.respond(HttpStatusCode.Forbidden)
+            return false
+        }
+        return true
     }
 
     fun stop() {
@@ -60,19 +102,32 @@ class TransportServer(
 
 internal val transportHttpClient by lazy { HttpClient { install(ContentNegotiation) { json() } } }
 
-suspend fun sendText(peer: Peer, senderName: String, content: String) {
+fun nowMillis(): Long = kotlin.time.Clock.System.now().toEpochMilliseconds()
+
+suspend fun sendText(peer: Peer, localDeviceId: String, senderName: String, content: String) {
     transportHttpClient.post("http://${peer.host}:${peer.port}/text") {
+        header(DEVICE_ID_HEADER, localDeviceId)
         contentType(ContentType.Application.Json)
         setBody(TextPayload(senderName, content))
     }
 }
 
 /** ponytail: reads the whole file into memory (client and server) — fine under the 25MB free-tier cap, stream if that cap ever lifts. */
-suspend fun sendFile(peer: Peer, senderName: String, file: PlatformFile) {
+suspend fun sendFile(peer: Peer, localDeviceId: String, senderName: String, file: PlatformFile) {
     transportHttpClient.post("http://${peer.host}:${peer.port}/file") {
+        header(DEVICE_ID_HEADER, localDeviceId)
+        header(DEVICE_NAME_HEADER, senderName)
         header("X-Filename", file.name)
-        header("X-Sender", senderName)
         contentType(ContentType.Application.OctetStream)
         setBody(file.bytes())
     }
+}
+
+/** Returns the responder's device id/name on success, so both sides can record each other as trusted. */
+suspend fun pairWith(peer: Peer, localDeviceId: String, localDeviceName: String, pin: String): PairResponse? {
+    val response: HttpResponse = transportHttpClient.post("http://${peer.host}:${peer.port}/pair") {
+        contentType(ContentType.Application.Json)
+        setBody(PairRequest(localDeviceId, localDeviceName, pin))
+    }
+    return if (response.status == HttpStatusCode.OK) response.body() else null
 }

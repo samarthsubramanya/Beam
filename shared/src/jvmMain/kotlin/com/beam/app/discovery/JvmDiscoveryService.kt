@@ -1,6 +1,8 @@
 package com.beam.app.discovery
 
+import java.net.Inet4Address
 import java.net.InetAddress
+import java.net.NetworkInterface
 import javax.jmdns.JmDNS
 import javax.jmdns.ServiceEvent
 import javax.jmdns.ServiceInfo
@@ -41,7 +43,7 @@ class JvmDiscoveryService : DiscoveryService {
 
     override fun start(localDeviceId: String, localDeviceName: String, servicePort: Int) {
         localServiceName = localDeviceName
-        val instance = JmDNS.create(InetAddress.getLocalHost(), localDeviceName)
+        val instance = JmDNS.create(findLanAddress(), localDeviceName)
         jmdns = instance
 
         val serviceInfo = ServiceInfo.create(
@@ -55,6 +57,15 @@ class JvmDiscoveryService : DiscoveryService {
         instance.registerService(serviceInfo)
         instance.addServiceListener(SERVICE_TYPE, listener)
     }
+
+    /** ponytail: InetAddress.getLocalHost() resolves to 127.0.0.1 on plenty of Macs — walk interfaces for a real LAN IPv4 instead. */
+    private fun findLanAddress(): InetAddress =
+        NetworkInterface.getNetworkInterfaces().asSequence()
+            .filter { it.isUp && !it.isLoopback && !it.isVirtual }
+            .flatMap { it.inetAddresses.asSequence() }
+            .filterIsInstance<Inet4Address>()
+            .firstOrNull { !it.isLoopbackAddress }
+            ?: InetAddress.getLocalHost()
 
     override fun stop() {
         jmdns?.let { instance ->

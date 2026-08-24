@@ -1,0 +1,14 @@
+CREATE TABLE TransferHistory (
+    id TEXT NOT NULL PRIMARY KEY,
+    peerName TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    timestampEpochMillis INTEGER NOT NULL
+);
+
+selectRecent:
+SELECT * FROM TransferHistory ORDER BY timestampEpochMillis DESC LIMIT 100;
+
+insertEntry:
+INSERT INTO TransferHistory(id, peerName, direction, kind, summary, timestampEpochMillis) VALUES (?, ?, ?, ?, ?, ?);
