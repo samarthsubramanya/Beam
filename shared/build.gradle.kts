@@ -52,6 +52,7 @@ kotlin {
             implementation(libs.sqldelight.android.driver)
             // RevenueCat purchases-kmp is mobile-only (no JVM/desktop artifact) — IAP doesn't exist on desktop.
             implementation(libs.purchases)
+            implementation(libs.zxing.embedded)
         }
         iosMain.dependencies {
             implementation(libs.ktor.client.darwin)
@@ -96,6 +97,8 @@ kotlin {
 
             implementation(libs.aboutlibraries.core)
             implementation(libs.aboutlibraries.compose.m3)
+
+            implementation(libs.qrcode.kotlin)
         }
     }
 }

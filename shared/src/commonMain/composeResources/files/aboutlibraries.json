@@ -2642,6 +2642,53 @@
             ]
         },
         {
+            "uniqueId": "com.google.zxing:core",
+            "artifactVersion": "3.4.1",
+            "name": "ZXing Core",
+            "description": "Core barcode encoding/decoding library",
+            "website": "https://github.com/zxing/zxing/core",
+            "developers": [
+                {
+                    "name": "ZXing Authors"
+                }
+            ],
+            "scm": {
+                "connection": "scm:git:https://github.com/zxing/zxing.git/core",
+                "developerConnection": "scm:git:https://github.com/zxing/zxing.git/core",
+                "url": "https://github.com/zxing/zxing/core"
+            },
+            "licenses": [
+                "Apache-2.0"
+            ],
+            "funding": [
+                
+            ]
+        },
+        {
+            "uniqueId": "com.journeyapps:zxing-android-embedded",
+            "artifactVersion": "4.3.0",
+            "name": "zxing-android-embedded",
+            "description": "Barcode scanner library for Android, based on the ZXing decoder",
+            "website": "https://github.com/journeyapps/zxing-android-embedded",
+            "developers": [
+                {
+                    "name": "Ralf Kistner",
+                    "organisationUrl": "https://journeyapps.com"
+                }
+            ],
+            "scm": {
+                "connection": "scm:git:github.com/journeyapps/zxing-android-embedded.git",
+                "developerConnection": "scm:git:ssh://github.com/journeyapps/zxing-android-embedded.git",
+                "url": "https://github.com/journeyapps/zxing-android-embedded"
+            },
+            "licenses": [
+                "Apache-2.0"
+            ],
+            "funding": [
+                
+            ]
+        },
+        {
             "uniqueId": "com.mikepenz:aboutlibraries-compose-core",
             "artifactVersion": "13.2.1",
             "name": "AboutLibraries Compose UI Library",
@@ -3396,6 +3443,29 @@
             },
             "licenses": [
                 "Apache-2.0"
+            ],
+            "funding": [
+                
+            ]
+        },
+        {
+            "uniqueId": "io.github.g0dkar:qrcode-kotlin",
+            "artifactVersion": "4.5.0",
+            "name": "qrcode-kotlin",
+            "description": "A Kotlin Library to generate QR Codes without any other dependencies.",
+            "website": "https://github.com/g0dkar/qrcode-kotlin",
+            "developers": [
+                {
+                    "name": "Rafael Lins"
+                }
+            ],
+            "scm": {
+                "connection": "scm:git://github.com/g0dkar/qrcode-kotlin.git",
+                "developerConnection": "scm:git://github.com/g0dkar/qrcode-kotlin.git",
+                "url": "https://github.com/g0dkar/qrcode-kotlin"
+            },
+            "licenses": [
+                "MIT"
             ],
             "funding": [
                 

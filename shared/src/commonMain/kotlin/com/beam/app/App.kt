@@ -13,7 +13,6 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -24,97 +23,67 @@ import androidx.compose.runtime.setValue
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.beam.app.db.BeamRepository
-import com.beam.app.db.DatabaseDriverFactory
 import com.beam.app.db.TransferEntry
-import com.beam.app.discovery.createDiscoveryService
-import com.beam.app.pairing.PairingManager
+import com.beam.app.discovery.localIpAddress
+import com.beam.app.pairing.buildPairingUri
 import com.beam.app.theme.BeamTheme
 import com.beam.app.transport.PlatformFile
-import com.beam.app.transport.TransportServer
 import com.beam.app.transport.nowMillis
 import com.beam.app.transport.pairWith
 import com.beam.app.transport.rememberFilePicker
-import com.beam.app.transport.saveToDownloads
 import com.beam.app.transport.sendFile
 import com.beam.app.transport.sendText
-import com.beam.app.transport.setClipboardText
 import com.beam.app.ui.FileTransferScreen
 import com.beam.app.ui.HomeScreen
 import com.beam.app.ui.LicensesScreen
 import com.beam.app.ui.MessageScreen
 import com.beam.app.ui.PairingScreen
 import com.beam.app.ui.SettingsScreen
-import kotlin.random.Random
+import com.beam.app.ui.ShareTargetScreen
 import kotlinx.coroutines.launch
 
-private const val PORT = 53212
 private const val SLIDE_MS = 300
 
 @Composable
-fun App() {
+fun App(sharedText: String? = null) {
     BeamTheme {
         Surface(color = MaterialTheme.colorScheme.background) {
-            BeamNavHost()
+            BeamNavHost(sharedText)
         }
     }
 }
 
 @Composable
-private fun BeamNavHost() {
+private fun BeamNavHost(sharedText: String?) {
     val scope = rememberCoroutineScope()
     val navController = rememberNavController()
-    val discovery = remember { createDiscoveryService() }
-    val deviceId = remember { "Beam-${Random.nextInt(1000, 9999)}" }
-    val repository = remember { BeamRepository(DatabaseDriverFactory()) }
-    val pairingManager = remember { PairingManager() }
-    val peers by discovery.peers.collectAsState()
+    val peers by BeamCore.discovery.peers.collectAsState()
+    val pairedIds by BeamCore.pairedIds.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
-    var pairedIds by remember { mutableStateOf(setOf<String>()) }
     var myPin by remember { mutableStateOf<String?>(null) }
     var pickedFile by remember { mutableStateOf<PlatformFile?>(null) }
     var selectedPeerId by remember { mutableStateOf<String?>(null) }
     val selectedPeer = peers.firstOrNull { it.id == selectedPeerId }
-
-    suspend fun refreshPaired() {
-        pairedIds = repository.pairedDeviceIds()
+    val myQrData = myPin?.let { pin ->
+        localIpAddress()?.let { ip -> buildPairingUri(BeamCore.deviceId, BeamCore.deviceId, ip, BeamCore.PORT, pin) }
     }
 
-    DisposableEffect(Unit) {
-        val server = TransportServer(
-            repository = repository,
-            pairingManager = pairingManager,
-            localDeviceId = deviceId,
-            localDeviceName = deviceId,
-            onTextReceived = { payload ->
-                setClipboardText(payload.content)
-                scope.launch {
-                    repository.recordHistory(
-                        TransferEntry(payload.senderName, "received", "text", payload.content, nowMillis())
-                    )
-                    snackbarHostState.showSnackbar("${payload.senderName}: ${payload.content} (copied to clipboard)")
-                }
-            },
-            onFileReceived = { file ->
-                val path = saveToDownloads(file.filename, file.bytes)
-                scope.launch {
-                    repository.recordHistory(
-                        TransferEntry(file.senderName, "received", "file", file.filename, nowMillis())
-                    )
-                    snackbarHostState.showSnackbar("Received ${file.filename} from ${file.senderName}")
-                }
-            },
-        )
-        server.start(PORT)
-        discovery.start(localDeviceId = deviceId, localDeviceName = deviceId, servicePort = PORT)
-        onDispose {
-            discovery.stop()
-            server.stop()
+    LaunchedEffect(Unit) {
+        BeamCore.ensureStarted()
+    }
+
+    LaunchedEffect(Unit) {
+        BeamCore.events.collect { event ->
+            when (event) {
+                is BeamEvent.Info -> snackbarHostState.showSnackbar(event.text)
+            }
         }
     }
 
-    LaunchedEffect(Unit) { refreshPaired() }
+    LaunchedEffect(sharedText) {
+        if (sharedText != null) navController.navigate("share")
+    }
 
     val pickFile = rememberFilePicker { pickedFile = it }
 
@@ -142,25 +111,37 @@ private fun BeamNavHost() {
                 HomeScreen(
                     peers = peers,
                     pairedIds = pairedIds,
-                    deviceId = deviceId,
+                    deviceId = BeamCore.deviceId,
                     onSelectUnpaired = { peer -> selectedPeerId = peer.id; navController.navigate("pairing") },
                     onOpenMessage = { peer -> selectedPeerId = peer.id; navController.navigate("message") },
                     onOpenFiles = { peer -> selectedPeerId = peer.id; navController.navigate("files") },
                     onOpenSettings = { navController.navigate("settings") },
+                    onPairNewDevice = { selectedPeerId = null; navController.navigate("pairing") },
                 )
             }
             composable("pairing") {
                 PairingScreen(
                     peer = selectedPeer,
                     myPin = myPin,
-                    onGeneratePin = { myPin = pairingManager.generatePin() },
+                    myQrData = myQrData,
+                    onGeneratePin = { myPin = BeamCore.pairingManager.generatePin() },
                     onAttemptPair = attempt@{ pin ->
                         val target = selectedPeer ?: return@attempt false
-                        val result = pairWith(target, deviceId, deviceId, pin)
+                        val result = pairWith(target, BeamCore.deviceId, BeamCore.deviceId, pin)
                         if (result != null) {
-                            repository.addPairedDevice(result.deviceId, result.deviceName, nowMillis())
-                            refreshPaired()
+                            BeamCore.repository.addPairedDevice(result.deviceId, result.deviceName, nowMillis())
+                            BeamCore.refreshPaired()
                             snackbarHostState.showSnackbar("Paired with ${target.name}")
+                            true
+                        } else {
+                            false
+                        }
+                    },
+                    onQrScanned = scan@{ payload ->
+                        val result = pairWith(payload.peer, BeamCore.deviceId, BeamCore.deviceId, payload.pin)
+                        if (result != null) {
+                            BeamCore.repository.addPairedDevice(result.deviceId, result.deviceName, nowMillis())
+                            BeamCore.refreshPaired()
                             true
                         } else {
                             false
@@ -174,8 +155,8 @@ private fun BeamNavHost() {
                     peer = selectedPeer,
                     onSend = send@{ text ->
                         val target = selectedPeer ?: return@send
-                        sendText(target, deviceId, deviceId, text)
-                        repository.recordHistory(TransferEntry(target.name, "sent", "text", text, nowMillis()))
+                        sendText(target, BeamCore.deviceId, BeamCore.deviceId, text)
+                        BeamCore.repository.recordHistory(TransferEntry(target.name, "sent", "text", text, nowMillis()))
                         snackbarHostState.showSnackbar("Sent to ${target.name}")
                     },
                     onBack = { navController.popBackStack() },
@@ -188,8 +169,8 @@ private fun BeamNavHost() {
                     pickedFile = pickedFile,
                     onSend = send@{ file ->
                         val target = selectedPeer ?: return@send
-                        sendFile(target, deviceId, deviceId, file)
-                        repository.recordHistory(TransferEntry(target.name, "sent", "file", file.name, nowMillis()))
+                        sendFile(target, BeamCore.deviceId, BeamCore.deviceId, file)
+                        BeamCore.repository.recordHistory(TransferEntry(target.name, "sent", "file", file.name, nowMillis()))
                         snackbarHostState.showSnackbar("Sent to ${target.name}")
                         pickedFile = null
                     },
@@ -198,13 +179,26 @@ private fun BeamNavHost() {
             }
             composable("settings") {
                 SettingsScreen(
-                    deviceId = deviceId,
+                    deviceId = BeamCore.deviceId,
                     onOpenLicenses = { navController.navigate("licenses") },
                     onBack = { navController.popBackStack() },
                 )
             }
             composable("licenses") {
                 LicensesScreen(onBack = { navController.popBackStack() })
+            }
+            composable("share") {
+                ShareTargetScreen(
+                    sharedText = sharedText ?: "",
+                    pairedPeers = peers.filter { it.id in pairedIds },
+                    onSend = { peer ->
+                        sendText(peer, BeamCore.deviceId, BeamCore.deviceId, sharedText ?: "")
+                        BeamCore.repository.recordHistory(
+                            TransferEntry(peer.name, "sent", "text", sharedText ?: "", nowMillis())
+                        )
+                    },
+                    onBack = { navController.popBackStack() },
+                )
             }
         }
     }
