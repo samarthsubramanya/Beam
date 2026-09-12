@@ -16,6 +16,7 @@ kotlin {
                 implementation(projects.shared)
                 implementation(compose.desktop.currentOs)
                 implementation(compose.material3)
+                implementation(compose.components.resources)
             }
         }
     }
@@ -30,6 +31,9 @@ compose.desktop {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "Beam"
             packageVersion = "1.0.0"
+            macOS { iconFile.set(project.file("icons/icon.icns")) }
+            windows { iconFile.set(project.file("icons/icon.ico")) }
+            linux { iconFile.set(project.file("icons/icon.png")) }
         }
     }
 }

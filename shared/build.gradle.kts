@@ -10,6 +10,10 @@ plugins {
     alias(libs.plugins.aboutLibraries)
 }
 
+compose.resources {
+    publicResClass = true
+}
+
 kotlin {
     targets.configureEach {
         compilations.configureEach {

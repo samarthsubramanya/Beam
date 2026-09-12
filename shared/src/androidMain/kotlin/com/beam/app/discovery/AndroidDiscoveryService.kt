@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
 import android.util.Log
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
@@ -17,7 +18,8 @@ class AndroidDiscoveryService(context: Context) : DiscoveryService {
     private val _peers = MutableStateFlow<List<Peer>>(emptyList())
     override val peers = _peers.asStateFlow()
 
-    private val discovered = mutableMapOf<String, Peer>()
+    // NsdManager delivers callbacks off the main thread, so this needs to be thread-safe.
+    private val discovered = ConcurrentHashMap<String, Peer>()
     private var registrationListener: NsdManager.RegistrationListener? = null
     private var discoveryListener: NsdManager.DiscoveryListener? = null
     private var localServiceName: String? = null

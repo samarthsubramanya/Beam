@@ -3,6 +3,7 @@ package com.beam.app.discovery
 import java.net.Inet4Address
 import java.net.InetAddress
 import java.net.NetworkInterface
+import java.util.concurrent.ConcurrentHashMap
 import javax.jmdns.JmDNS
 import javax.jmdns.ServiceEvent
 import javax.jmdns.ServiceInfo
@@ -17,7 +18,8 @@ class JvmDiscoveryService : DiscoveryService {
     private val _peers = MutableStateFlow<List<Peer>>(emptyList())
     override val peers = _peers.asStateFlow()
 
-    private val discovered = mutableMapOf<String, Peer>()
+    // jmdns delivers callbacks off the main thread, so this needs to be thread-safe.
+    private val discovered = ConcurrentHashMap<String, Peer>()
     private var jmdns: JmDNS? = null
     private var localServiceName: String? = null
 
