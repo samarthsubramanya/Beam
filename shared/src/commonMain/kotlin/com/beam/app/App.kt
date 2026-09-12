@@ -45,16 +45,16 @@ import kotlinx.coroutines.launch
 private const val SLIDE_MS = 300
 
 @Composable
-fun App(sharedText: String? = null) {
+fun App(shareContent: ShareContent? = null) {
     BeamTheme {
         Surface(color = MaterialTheme.colorScheme.background) {
-            BeamNavHost(sharedText)
+            BeamNavHost(shareContent)
         }
     }
 }
 
 @Composable
-private fun BeamNavHost(sharedText: String?) {
+private fun BeamNavHost(shareContent: ShareContent?) {
     val scope = rememberCoroutineScope()
     val navController = rememberNavController()
     val peers by BeamCore.discovery.peers.collectAsState()
@@ -81,8 +81,8 @@ private fun BeamNavHost(sharedText: String?) {
         }
     }
 
-    LaunchedEffect(sharedText) {
-        if (sharedText != null) navController.navigate("share")
+    LaunchedEffect(shareContent) {
+        if (shareContent != null) navController.navigate("share")
     }
 
     val pickFile = rememberFilePicker { pickedFile = it }
@@ -188,14 +188,25 @@ private fun BeamNavHost(sharedText: String?) {
                 LicensesScreen(onBack = { navController.popBackStack() })
             }
             composable("share") {
+                val content = shareContent ?: return@composable
                 ShareTargetScreen(
-                    sharedText = sharedText ?: "",
+                    content = content,
                     pairedPeers = peers.filter { it.id in pairedIds },
                     onSend = { peer ->
-                        sendText(peer, BeamCore.deviceId, BeamCore.deviceId, sharedText ?: "")
-                        BeamCore.repository.recordHistory(
-                            TransferEntry(peer.name, "sent", "text", sharedText ?: "", nowMillis())
-                        )
+                        when (content) {
+                            is ShareContent.Text -> {
+                                sendText(peer, BeamCore.deviceId, BeamCore.deviceId, content.text)
+                                BeamCore.repository.recordHistory(
+                                    TransferEntry(peer.name, "sent", "text", content.text, nowMillis())
+                                )
+                            }
+                            is ShareContent.File -> {
+                                sendFile(peer, BeamCore.deviceId, BeamCore.deviceId, content.file)
+                                BeamCore.repository.recordHistory(
+                                    TransferEntry(peer.name, "sent", "file", content.file.name, nowMillis())
+                                )
+                            }
+                        }
                     },
                     onBack = { navController.popBackStack() },
                 )

@@ -16,7 +16,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -38,15 +40,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.beam.app.ShareContent
 import com.beam.app.discovery.Peer
 import kotlinx.coroutines.launch
 
-/** Reached when the OS share sheet hands Beam some text/a URL — pick an already-paired device to send it to instantly. */
+/** Reached when the OS share sheet hands Beam some content — pick an already-paired device to send it to instantly. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ShareTargetScreen(
-    sharedText: String,
+    content: ShareContent,
     pairedPeers: List<Peer>,
     onSend: suspend (Peer) -> Unit,
     onBack: () -> Unit,
@@ -67,26 +71,35 @@ fun ShareTargetScreen(
         },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
-            Text(
-                sharedText,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 2,
-                modifier = Modifier.fillMaxWidth().padding(16.dp),
-            )
+            SharePreviewCard(content, Modifier.padding(16.dp))
+
             if (pairedPeers.isEmpty()) {
                 Column(
                     Modifier.fillMaxSize().padding(32.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,
                 ) {
+                    Icon(
+                        Icons.Filled.Person,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(32.dp),
+                    )
+                    Spacer(Modifier.size(8.dp))
                     Text(
-                        "No paired devices yet. Open Beam and pair with one first.",
+                        "No paired devices yet — open Beam and pair with one first.",
                         style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center,
                     )
                 }
             } else {
+                Text(
+                    "Send to:",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                )
                 LazyColumn(Modifier.weight(1f)) {
                     items(pairedPeers, key = { it.id }) { peer ->
                         Card(
@@ -130,6 +143,33 @@ fun ShareTargetScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun SharePreviewCard(content: ShareContent, modifier: Modifier = Modifier) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+    ) {
+        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                if (content is ShareContent.File) Icons.Filled.Share else Icons.Filled.Info,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+            )
+            Spacer(Modifier.size(12.dp))
+            Text(
+                when (content) {
+                    is ShareContent.Text -> content.text
+                    is ShareContent.File -> content.file.name
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }

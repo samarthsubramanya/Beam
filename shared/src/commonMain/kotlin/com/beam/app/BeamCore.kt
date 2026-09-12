@@ -13,7 +13,6 @@ import com.beam.app.transport.nowMillis
 import com.beam.app.transport.openUrl
 import com.beam.app.transport.saveToDownloads
 import com.beam.app.transport.setClipboardText
-import kotlin.random.Random
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -37,7 +36,7 @@ sealed interface BeamEvent {
 object BeamCore {
     const val PORT = 53212
 
-    val deviceId: String = "Beam-${Random.nextInt(1000, 9999)}"
+    val deviceId: String = persistentDeviceId()
     val repository: BeamRepository by lazy { BeamRepository(DatabaseDriverFactory()) }
     val pairingManager: PairingManager by lazy { PairingManager() }
     val discovery: DiscoveryService by lazy { createDiscoveryService() }
@@ -62,6 +61,8 @@ object BeamCore {
             localDeviceName = deviceId,
             onTextReceived = ::handleTextReceived,
             onFileReceived = ::handleFileReceived,
+            onPaired = ::handlePaired,
+            onUnauthorized = ::handleUnauthorized,
         )
         newServer.start(PORT)
         server = newServer
@@ -102,6 +103,20 @@ object BeamCore {
                 TransferEntry(file.senderName, "received", "file", file.filename, nowMillis())
             )
             _events.emit(BeamEvent.Info("Received ${file.filename} from ${file.senderName} -> $path"))
+        }
+    }
+
+    /** Fires on the RECEIVING side of a /pair request — without this, only the initiator ever learns pairing succeeded. */
+    private fun handlePaired(deviceId: String, deviceName: String) {
+        scope.launch {
+            refreshPaired()
+            _events.emit(BeamEvent.Info("$deviceName paired with you"))
+        }
+    }
+
+    private fun handleUnauthorized(deviceId: String?) {
+        scope.launch {
+            _events.emit(BeamEvent.Info("Blocked a message from an unpaired device (${deviceId ?: "unknown"})"))
         }
     }
 }

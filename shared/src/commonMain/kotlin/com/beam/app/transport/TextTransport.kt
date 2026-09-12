@@ -53,6 +53,8 @@ class TransportServer(
     private val localDeviceName: String,
     private val onTextReceived: (TextPayload) -> Unit,
     private val onFileReceived: (ReceivedFile) -> Unit,
+    private val onPaired: (deviceId: String, deviceName: String) -> Unit,
+    private val onUnauthorized: (deviceId: String?) -> Unit,
 ) {
     private var server: EmbeddedServer<*, *>? = null
 
@@ -64,6 +66,7 @@ class TransportServer(
                     val request = call.receive<PairRequest>()
                     if (pairingManager.verifyAndConsume(request.pin)) {
                         repository.addPairedDevice(request.deviceId, request.deviceName, nowMillis())
+                        onPaired(request.deviceId, request.deviceName)
                         call.respond(PairResponse(localDeviceId, localDeviceName))
                     } else {
                         call.respond(HttpStatusCode.Forbidden)
@@ -89,6 +92,7 @@ class TransportServer(
         val deviceId = call.request.headers[DEVICE_ID_HEADER]
         if (deviceId == null || !repository.isPaired(deviceId)) {
             call.respond(HttpStatusCode.Forbidden)
+            onUnauthorized(deviceId)
             return false
         }
         return true

@@ -95,8 +95,9 @@ fun HomeScreen(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                 )
                 LazyColumn(Modifier.weight(1f)) {
-                    items(peers, key = { it.id }) { peer ->
+                    items(peers.sortedByDescending { it.id in pairedIds }, key = { it.id }) { peer ->
                         PeerCard(
+                            modifier = Modifier.animateItem(),
                             peer = peer,
                             isPaired = peer.id in pairedIds,
                             onPairClick = { onSelectUnpaired(peer) },
@@ -135,9 +136,10 @@ private fun PeerCard(
     onPairClick: () -> Unit,
     onMessageClick: () -> Unit,
     onFilesClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+        modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
         shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
     ) {
