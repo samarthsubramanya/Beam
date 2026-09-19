@@ -8,6 +8,7 @@ import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
+import com.beam.app.AppSettings
 import com.beam.app.discovery.appContext
 
 /** Shared by the file picker and by MainActivity's ACTION_SEND handling (Share sheet -> Beam with a file). */
@@ -36,10 +37,12 @@ actual fun rememberFilePicker(onPicked: (PlatformFile) -> Unit): () -> Unit {
 
 actual fun saveToDownloads(filename: String, bytes: ByteArray): String {
     val resolver = appContext.contentResolver
+    val subfolder = AppSettings.downloadPath.value?.trim('/')?.takeIf { it.isNotBlank() }
+    val relativePath = if (subfolder != null) "${Environment.DIRECTORY_DOWNLOADS}/$subfolder" else Environment.DIRECTORY_DOWNLOADS
     val values = ContentValues().apply {
         put(MediaStore.MediaColumns.DISPLAY_NAME, filename)
         put(MediaStore.MediaColumns.MIME_TYPE, "application/octet-stream")
-        put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+        put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath)
     }
     val uri: Uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
         ?: error("Could not create download entry")

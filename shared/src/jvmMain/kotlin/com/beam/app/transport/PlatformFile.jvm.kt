@@ -1,6 +1,7 @@
 package com.beam.app.transport
 
 import androidx.compose.runtime.Composable
+import com.beam.app.AppSettings
 import java.awt.FileDialog
 import java.awt.Frame
 import java.io.File
@@ -18,7 +19,9 @@ actual fun rememberFilePicker(onPicked: (PlatformFile) -> Unit): () -> Unit = {
 }
 
 actual fun saveToDownloads(filename: String, bytes: ByteArray): String {
-    val downloads = File(System.getProperty("user.home"), "Downloads").apply { mkdirs() }
+    val configured = AppSettings.downloadPath.value?.takeIf { it.isNotBlank() }
+    val downloads = (configured?.let(::File) ?: File(System.getProperty("user.home"), "Downloads"))
+        .apply { mkdirs() }
     val out = File(downloads, filename)
     out.writeBytes(bytes)
     return out.absolutePath

@@ -6,6 +6,7 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import com.beam.app.ThemeMode
 
 // Seed: an electric cyan "beam of light" against a near-black surface.
 private val LightColors = lightColorScheme(
@@ -39,9 +40,14 @@ private val DarkColors = darkColorScheme(
 )
 
 @Composable
-fun BeamTheme(content: @Composable () -> Unit) {
+fun BeamTheme(themeMode: ThemeMode = ThemeMode.SYSTEM, content: @Composable () -> Unit) {
+    val isDark = when (themeMode) {
+        ThemeMode.SYSTEM -> isSystemInDarkTheme()
+        ThemeMode.LIGHT -> false
+        ThemeMode.DARK -> true
+    }
     MaterialTheme(
-        colorScheme = if (isSystemInDarkTheme()) DarkColors else LightColors,
+        colorScheme = if (isDark) DarkColors else LightColors,
         content = content,
     )
 }

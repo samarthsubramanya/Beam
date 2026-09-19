@@ -104,7 +104,14 @@ class TransportServer(
     }
 }
 
-internal val transportHttpClient by lazy { HttpClient { install(ContentNegotiation) { json() } } }
+internal val transportHttpClient by lazy {
+    HttpClient {
+        install(ContentNegotiation) {
+            // GitHub's release JSON carries many fields we don't model; don't fail on the ones we ignore.
+            json(kotlinx.serialization.json.Json { ignoreUnknownKeys = true })
+        }
+    }
+}
 
 fun nowMillis(): Long = kotlin.time.Clock.System.now().toEpochMilliseconds()
 

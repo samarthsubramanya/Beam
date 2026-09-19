@@ -29,6 +29,7 @@ import com.beam.app.pairing.buildPairingUri
 import com.beam.app.theme.BeamTheme
 import com.beam.app.transport.PlatformFile
 import com.beam.app.transport.nowMillis
+import com.beam.app.transport.openUrl
 import com.beam.app.transport.pairWith
 import com.beam.app.transport.rememberFilePicker
 import com.beam.app.transport.sendFile
@@ -46,7 +47,8 @@ private const val SLIDE_MS = 300
 
 @Composable
 fun App(shareContent: ShareContent? = null) {
-    BeamTheme {
+    val themeMode by AppSettings.themeMode.collectAsState()
+    BeamTheme(themeMode) {
         Surface(color = MaterialTheme.colorScheme.background) {
             BeamNavHost(shareContent)
         }
@@ -178,8 +180,30 @@ private fun BeamNavHost(shareContent: ShareContent?) {
                 )
             }
             composable("settings") {
+                val themeMode by AppSettings.themeMode.collectAsState()
+                val downloadPath by AppSettings.downloadPath.collectAsState()
+                val launchOnLogin by AppSettings.launchOnLogin.collectAsState()
                 SettingsScreen(
                     deviceId = BeamCore.deviceId,
+                    themeMode = themeMode,
+                    onThemeModeChange = AppSettings::setThemeMode,
+                    downloadPath = downloadPath,
+                    onDownloadPathChange = AppSettings::setDownloadPath,
+                    launchOnLoginSupported = isLaunchOnLoginSupported(),
+                    launchOnLogin = launchOnLogin,
+                    onLaunchOnLoginChange = AppSettings::setLaunchOnLogin,
+                    onCheckForUpdates = {
+                        scope.launch {
+                            when (val result = checkForUpdate()) {
+                                is UpdateCheckResult.Available -> {
+                                    snackbarHostState.showSnackbar("Update ${result.version} available — opening browser")
+                                    openUrl(result.url)
+                                }
+                                UpdateCheckResult.UpToDate -> snackbarHostState.showSnackbar("You're on the latest version")
+                                UpdateCheckResult.Failed -> snackbarHostState.showSnackbar("Couldn't check for updates")
+                            }
+                        }
+                    },
                     onOpenLicenses = { navController.navigate("licenses") },
                     onBack = { navController.popBackStack() },
                 )

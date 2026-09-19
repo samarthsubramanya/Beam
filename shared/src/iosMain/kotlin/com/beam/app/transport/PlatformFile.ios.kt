@@ -1,5 +1,6 @@
 package com.beam.app.transport
 
+import com.beam.app.AppSettings
 import com.beam.app.discovery.toByteArray
 import com.beam.app.discovery.toNSData
 import androidx.compose.runtime.Composable
@@ -7,6 +8,7 @@ import androidx.compose.runtime.remember
 import kotlinx.cinterop.ExperimentalForeignApi
 import platform.Foundation.NSData
 import platform.Foundation.NSDocumentDirectory
+import platform.Foundation.NSFileManager
 import platform.Foundation.NSSearchPathForDirectoriesInDomains
 import platform.Foundation.NSURL
 import platform.Foundation.NSUserDomainMask
@@ -47,10 +49,14 @@ actual fun rememberFilePicker(onPicked: (PlatformFile) -> Unit): () -> Unit {
     }
 }
 
+@OptIn(ExperimentalForeignApi::class)
 actual fun saveToDownloads(filename: String, bytes: ByteArray): String {
     val docsDir = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, true)
         .first() as String
-    val path = "$docsDir/$filename"
+    val subfolder = AppSettings.downloadPath.value?.trim('/')?.takeIf { it.isNotBlank() }
+    val dir = if (subfolder != null) "$docsDir/$subfolder" else docsDir
+    NSFileManager.defaultManager.createDirectoryAtPath(dir, withIntermediateDirectories = true, attributes = null, error = null)
+    val path = "$dir/$filename"
     bytes.toNSData().writeToFile(path, atomically = true)
     return path
 }
