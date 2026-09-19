@@ -6,9 +6,11 @@ import com.beam.app.db.TransferEntry
 import com.beam.app.discovery.DiscoveryService
 import com.beam.app.discovery.createDiscoveryService
 import com.beam.app.pairing.PairingManager
+import com.beam.app.pro.BeamPro
 import com.beam.app.transport.ReceivedFile
 import com.beam.app.transport.TextPayload
 import com.beam.app.transport.TransportServer
+import com.beam.app.transport.fetchPeerPro
 import com.beam.app.transport.nowMillis
 import com.beam.app.transport.openUrl
 import com.beam.app.transport.saveToDownloads
@@ -16,13 +18,17 @@ import com.beam.app.transport.setClipboardText
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlin.concurrent.Volatile
 
 sealed interface BeamEvent {
     data class Info(val text: String) : BeamEvent
@@ -34,7 +40,12 @@ sealed interface BeamEvent {
  * Activity recreation/backgrounding, independent of whatever screen happens to be on-screen.
  */
 object BeamCore {
-    const val PORT = 53212
+    const val PREFERRED_PORT = 53212
+    private const val PRO_POLL_MS = 30_000L
+
+    /** The port the transport server actually bound (may differ from [PREFERRED_PORT]); null until started. */
+    @Volatile var port: Int? = null
+        private set
 
     val deviceId: String = persistentDeviceId()
     val repository: BeamRepository by lazy { BeamRepository(DatabaseDriverFactory()) }
@@ -52,28 +63,57 @@ object BeamCore {
 
     val isRunning: Boolean get() = server != null
 
+    @Volatile private var starting = false
+
     fun ensureStarted() {
-        if (server != null) return
-        val newServer = TransportServer(
-            repository = repository,
-            pairingManager = pairingManager,
-            localDeviceId = deviceId,
-            localDeviceName = deviceId,
-            onTextReceived = ::handleTextReceived,
-            onFileReceived = ::handleFileReceived,
-            onPaired = ::handlePaired,
-            onUnauthorized = ::handleUnauthorized,
-        )
-        newServer.start(PORT)
-        server = newServer
-        discovery.start(localDeviceId = deviceId, localDeviceName = deviceId, servicePort = PORT)
-        scope.launch { refreshPaired() }
+        if (starting) return
+        starting = true
+        scope.launch {
+            val newServer = TransportServer(
+                repository = repository,
+                pairingManager = pairingManager,
+                localDeviceId = deviceId,
+                localDeviceName = deviceId,
+                onTextReceived = ::handleTextReceived,
+                onFileReceived = ::handleFileReceived,
+                onPaired = ::handlePaired,
+                onUnauthorized = ::handleUnauthorized,
+                isLocalPro = { BeamPro.localPro.value },
+                canPair = { id -> repository.isPaired(id) || BeamPro.canPairAnother(repository.pairedDeviceIds().size) },
+            )
+            val boundPort = try {
+                newServer.start(PREFERRED_PORT)
+            } catch (e: Exception) {
+                starting = false
+                _events.emit(BeamEvent.Info("Beam couldn't start its network listener: ${e.message}"))
+                return@launch
+            }
+            server = newServer
+            port = boundPort
+            discovery.start(localDeviceId = deviceId, localDeviceName = deviceId, servicePort = boundPort)
+            refreshPaired()
+            BeamPro.start()
+            if (!BeamPro.canPurchase) inheritProFromPairedPhones()
+        }
+    }
+
+    /** Desktop has no store SDK: it's Pro whenever a paired, reachable phone reports Pro. */
+    private suspend fun inheritProFromPairedPhones() {
+        combine(discovery.peers, pairedIds) { peers, ids -> peers.filter { it.id in ids } }
+            .collectLatest { paired ->
+                while (true) {
+                    BeamPro.setInheritedPro(paired.any { fetchPeerPro(it, deviceId) == true })
+                    delay(PRO_POLL_MS)
+                }
+            }
     }
 
     fun stop() {
         discovery.stop()
         server?.stop()
         server = null
+        port = null
+        starting = false
     }
 
     suspend fun refreshPaired() {

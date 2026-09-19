@@ -47,6 +47,10 @@ fun SettingsScreen(
     onThemeModeChange: (ThemeMode) -> Unit,
     downloadPath: String?,
     onDownloadPathChange: (String?) -> Unit,
+    isPro: Boolean,
+    canPurchase: Boolean,
+    onUpgrade: () -> Unit,
+    onRestorePurchases: () -> Unit,
     launchOnLoginSupported: Boolean,
     launchOnLogin: Boolean,
     onLaunchOnLoginChange: (Boolean) -> Unit,
@@ -77,6 +81,33 @@ fun SettingsScreen(
                 leadingContent = { Icon(Icons.Filled.Person, contentDescription = null) },
                 modifier = Modifier.fillMaxWidth(),
             )
+
+            HorizontalDivider()
+
+            SectionLabel("Beam Pro")
+            ListItem(
+                headlineContent = { Text(if (isPro) "Beam Pro is active" else "Free plan") },
+                supportingContent = {
+                    Text(
+                        when {
+                            isPro && !canPurchase -> "Unlocked by your paired phone"
+                            isPro -> "File transfers and unlimited devices"
+                            canPurchase -> "Unlock file transfers and unlimited devices"
+                            else -> "Get Beam Pro on your phone and keep it paired with this computer"
+                        }
+                    )
+                },
+                trailingContent = if (!isPro && canPurchase) {
+                    { TextButton(onClick = onUpgrade) { Text("Upgrade") } }
+                } else null,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            if (canPurchase) {
+                ListItem(
+                    headlineContent = { Text("Restore purchases") },
+                    modifier = Modifier.fillMaxWidth().clickable(onClick = onRestorePurchases),
+                )
+            }
 
             HorizontalDivider()
 

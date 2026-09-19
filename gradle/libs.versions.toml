@@ -14,7 +14,7 @@ koin = "4.2.1"
 kotlin = "2.3.21"
 ktor = "3.4.3"
 supabase-kt = "3.5.0"
-revenuecat = "3.2.1"
+revenuecat = "3.9.0"
 sqldelight = "2.1.0"
 okio = "3.12.0"
 jmdns = "3.6.3"
@@ -50,6 +50,7 @@ supabase-auth = { module = "io.github.jan-tennert.supabase:auth-kt", version.ref
 supabase-realtime = { module = "io.github.jan-tennert.supabase:realtime-kt", version.ref = "supabase-kt" }
 supabase-storage = { module = "io.github.jan-tennert.supabase:storage-kt", version.ref = "supabase-kt" }
 purchases = { module = "com.revenuecat.purchases:purchases-kmp-core", version.ref = "revenuecat" }
+purchases-ui = { module = "com.revenuecat.purchases:purchases-kmp-ui", version.ref = "revenuecat" }
 sqldelight-runtime = { module = "app.cash.sqldelight:runtime", version.ref = "sqldelight" }
 sqldelight-android-driver = { module = "app.cash.sqldelight:android-driver", version.ref = "sqldelight" }
 sqldelight-native-driver = { module = "app.cash.sqldelight:native-driver", version.ref = "sqldelight" }

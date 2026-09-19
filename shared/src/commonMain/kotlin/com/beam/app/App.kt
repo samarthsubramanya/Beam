@@ -26,6 +26,8 @@ import androidx.navigation.compose.rememberNavController
 import com.beam.app.db.TransferEntry
 import com.beam.app.discovery.localIpAddress
 import com.beam.app.pairing.buildPairingUri
+import com.beam.app.pro.BeamPro
+import com.beam.app.pro.PaywallContent
 import com.beam.app.theme.BeamTheme
 import com.beam.app.transport.PlatformFile
 import com.beam.app.transport.nowMillis
@@ -61,6 +63,7 @@ private fun BeamNavHost(shareContent: ShareContent?) {
     val navController = rememberNavController()
     val peers by BeamCore.discovery.peers.collectAsState()
     val pairedIds by BeamCore.pairedIds.collectAsState()
+    val isPro by BeamPro.isPro.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
     var myPin by remember { mutableStateOf<String?>(null) }
@@ -68,7 +71,9 @@ private fun BeamNavHost(shareContent: ShareContent?) {
     var selectedPeerId by remember { mutableStateOf<String?>(null) }
     val selectedPeer = peers.firstOrNull { it.id == selectedPeerId }
     val myQrData = myPin?.let { pin ->
-        localIpAddress()?.let { ip -> buildPairingUri(BeamCore.deviceId, BeamCore.deviceId, ip, BeamCore.PORT, pin) }
+        localIpAddress()?.let { ip ->
+            BeamCore.port?.let { port -> buildPairingUri(BeamCore.deviceId, BeamCore.deviceId, ip, port, pin) }
+        }
     }
 
     LaunchedEffect(Unit) {
@@ -116,7 +121,17 @@ private fun BeamNavHost(shareContent: ShareContent?) {
                     deviceId = BeamCore.deviceId,
                     onSelectUnpaired = { peer -> selectedPeerId = peer.id; navController.navigate("pairing") },
                     onOpenMessage = { peer -> selectedPeerId = peer.id; navController.navigate("message") },
-                    onOpenFiles = { peer -> selectedPeerId = peer.id; navController.navigate("files") },
+                    filesLocked = !isPro,
+                    showProPromo = !isPro && !BeamPro.canPurchase,
+                    onProPromoClick = { navController.navigate("paywall") },
+                    onOpenFiles = { peer ->
+                        if (isPro) {
+                            selectedPeerId = peer.id
+                            navController.navigate("files")
+                        } else {
+                            navController.navigate("paywall")
+                        }
+                    },
                     onOpenSettings = { navController.navigate("settings") },
                     onPairNewDevice = { selectedPeerId = null; navController.navigate("pairing") },
                 )
@@ -129,6 +144,10 @@ private fun BeamNavHost(shareContent: ShareContent?) {
                     onGeneratePin = { myPin = BeamCore.pairingManager.generatePin() },
                     onAttemptPair = attempt@{ pin ->
                         val target = selectedPeer ?: return@attempt false
+                        if (target.id !in pairedIds && !BeamPro.canPairAnother(pairedIds.size)) {
+                            navController.navigate("paywall")
+                            return@attempt false
+                        }
                         val result = pairWith(target, BeamCore.deviceId, BeamCore.deviceId, pin)
                         if (result != null) {
                             BeamCore.repository.addPairedDevice(result.deviceId, result.deviceName, nowMillis())
@@ -140,6 +159,10 @@ private fun BeamNavHost(shareContent: ShareContent?) {
                         }
                     },
                     onQrScanned = scan@{ payload ->
+                        if (payload.peer.id !in pairedIds && !BeamPro.canPairAnother(pairedIds.size)) {
+                            navController.navigate("paywall")
+                            return@scan false
+                        }
                         val result = pairWith(payload.peer, BeamCore.deviceId, BeamCore.deviceId, payload.pin)
                         if (result != null) {
                             BeamCore.repository.addPairedDevice(result.deviceId, result.deviceName, nowMillis())
@@ -179,6 +202,9 @@ private fun BeamNavHost(shareContent: ShareContent?) {
                     onBack = { navController.popBackStack() },
                 )
             }
+            composable("paywall") {
+                PaywallContent(onDismiss = { navController.popBackStack() })
+            }
             composable("settings") {
                 val themeMode by AppSettings.themeMode.collectAsState()
                 val downloadPath by AppSettings.downloadPath.collectAsState()
@@ -189,6 +215,16 @@ private fun BeamNavHost(shareContent: ShareContent?) {
                     onThemeModeChange = AppSettings::setThemeMode,
                     downloadPath = downloadPath,
                     onDownloadPathChange = AppSettings::setDownloadPath,
+                    isPro = isPro,
+                    canPurchase = BeamPro.canPurchase,
+                    onUpgrade = { navController.navigate("paywall") },
+                    onRestorePurchases = {
+                        BeamPro.restore { active ->
+                            scope.launch {
+                                snackbarHostState.showSnackbar(if (active) "Beam Pro restored" else "No purchases to restore")
+                            }
+                        }
+                    },
                     launchOnLoginSupported = isLaunchOnLoginSupported(),
                     launchOnLogin = launchOnLogin,
                     onLaunchOnLoginChange = AppSettings::setLaunchOnLogin,
@@ -216,7 +252,7 @@ private fun BeamNavHost(shareContent: ShareContent?) {
                 ShareTargetScreen(
                     content = content,
                     pairedPeers = peers.filter { it.id in pairedIds },
-                    onSend = { peer ->
+                    onSend = send@{ peer ->
                         when (content) {
                             is ShareContent.Text -> {
                                 sendText(peer, BeamCore.deviceId, BeamCore.deviceId, content.text)
@@ -225,6 +261,10 @@ private fun BeamNavHost(shareContent: ShareContent?) {
                                 )
                             }
                             is ShareContent.File -> {
+                                if (!isPro) {
+                                    navController.navigate("paywall")
+                                    return@send
+                                }
                                 sendFile(peer, BeamCore.deviceId, BeamCore.deviceId, content.file)
                                 BeamCore.repository.recordHistory(
                                     TransferEntry(peer.name, "sent", "file", content.file.name, nowMillis())

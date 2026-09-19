@@ -32,6 +32,8 @@ kotlin {
         iosTarget.binaries.framework {
             baseName = "Shared"
             isStatic = true
+            // SQLDelight's native driver needs the system SQLite; a static framework doesn't pull it in itself.
+            linkerOpts.add("-lsqlite3")
         }
     }
 
@@ -56,12 +58,14 @@ kotlin {
             implementation(libs.sqldelight.android.driver)
             // RevenueCat purchases-kmp is mobile-only (no JVM/desktop artifact) — IAP doesn't exist on desktop.
             implementation(libs.purchases)
+            implementation(libs.purchases.ui)
             implementation(libs.zxing.embedded)
         }
         iosMain.dependencies {
             implementation(libs.ktor.client.darwin)
             implementation(libs.sqldelight.native.driver)
             implementation(libs.purchases)
+            implementation(libs.purchases.ui)
         }
         jvmMain.dependencies {
             implementation(libs.sqldelight.jvm.driver)

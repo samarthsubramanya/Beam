@@ -18,9 +18,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -51,8 +53,11 @@ fun HomeScreen(
     onSelectUnpaired: (Peer) -> Unit,
     onOpenMessage: (Peer) -> Unit,
     onOpenFiles: (Peer) -> Unit,
+    filesLocked: Boolean,
     onOpenSettings: () -> Unit,
     onPairNewDevice: () -> Unit,
+    showProPromo: Boolean = false,
+    onProPromoClick: () -> Unit = {},
 ) {
     Scaffold(
         floatingActionButton = {
@@ -85,8 +90,9 @@ fun HomeScreen(
         },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
+            if (showProPromo) ProPromoCard(onProPromoClick)
             if (peers.isEmpty()) {
-                EmptyRadarState()
+                EmptyRadarState(Modifier.weight(1f))
             } else {
                 Text(
                     "${peers.size} device${if (peers.size == 1) "" else "s"} nearby",
@@ -102,6 +108,7 @@ fun HomeScreen(
                             isPaired = peer.id in pairedIds,
                             onPairClick = { onSelectUnpaired(peer) },
                             onMessageClick = { onOpenMessage(peer) },
+                            filesLocked = filesLocked,
                             onFilesClick = { onOpenFiles(peer) },
                         )
                     }
@@ -111,10 +118,37 @@ fun HomeScreen(
     }
 }
 
+/** Desktop can't buy Pro itself — this points people to the phone app that unlocks it. */
 @Composable
-private fun EmptyRadarState() {
+private fun ProPromoCard(onClick: () -> Unit) {
+    Card(
+        onClick = onClick,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+    ) {
+        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Filled.Star, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
+            Column(Modifier.weight(1f).padding(start = 16.dp)) {
+                Text(
+                    "Unlock Beam Pro",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+                Text(
+                    "Send files and pair unlimited devices. Get Beam Pro in the Beam app on your phone — " +
+                        "this computer unlocks whenever that phone is paired and nearby.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmptyRadarState(modifier: Modifier = Modifier) {
     Column(
-        Modifier.fillMaxSize().padding(32.dp),
+        modifier.fillMaxSize().padding(32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
@@ -133,6 +167,7 @@ private fun EmptyRadarState() {
 private fun PeerCard(
     peer: Peer,
     isPaired: Boolean,
+    filesLocked: Boolean,
     onPairClick: () -> Unit,
     onMessageClick: () -> Unit,
     onFilesClick: () -> Unit,
@@ -176,7 +211,10 @@ private fun PeerCard(
                     }
                     Spacer(Modifier.size(4.dp))
                     FilledIconButton(onClick = onFilesClick) {
-                        Icon(Icons.Filled.Share, contentDescription = "Send a file")
+                        Icon(
+                            if (filesLocked) Icons.Filled.Lock else Icons.Filled.Share,
+                            contentDescription = if (filesLocked) "Send a file (Beam Pro)" else "Send a file",
+                        )
                     }
                 }
             } else {
