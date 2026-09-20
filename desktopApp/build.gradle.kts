@@ -30,7 +30,10 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "Beam"
-            packageVersion = "1.0.0"
+            // CI passes -Pbeam.version=1.0.<run number>; jpackage only accepts numeric MAJOR.MINOR.BUILD.
+            packageVersion = (findProperty("beam.version") as String?) ?: "1.0.0"
+            // The jlinked runtime must include java.prefs / java.sql etc. or the packaged app crashes at launch.
+            includeAllModules = true
             macOS { iconFile.set(project.file("icons/icon.icns")) }
             windows { iconFile.set(project.file("icons/icon.ico")) }
             linux { iconFile.set(project.file("icons/icon.png")) }
