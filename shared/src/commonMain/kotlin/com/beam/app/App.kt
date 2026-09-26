@@ -39,6 +39,7 @@ import com.beam.app.transport.sendText
 import com.beam.app.ui.FileTransferScreen
 import com.beam.app.ui.HomeScreen
 import com.beam.app.ui.LicensesScreen
+import com.beam.app.ui.LinkShareScreen
 import com.beam.app.ui.MessageScreen
 import com.beam.app.ui.PairingScreen
 import com.beam.app.ui.SettingsScreen
@@ -132,6 +133,7 @@ private fun BeamNavHost(shareContent: ShareContent?) {
                             navController.navigate("paywall")
                         }
                     },
+                    onShareLink = { navController.navigate(if (isPro) "link" else "paywall") },
                     onOpenSettings = { navController.navigate("settings") },
                     onPairNewDevice = { selectedPeerId = null; navController.navigate("pairing") },
                 )
@@ -201,6 +203,9 @@ private fun BeamNavHost(shareContent: ShareContent?) {
                     },
                     onBack = { navController.popBackStack() },
                 )
+            }
+            composable("link") {
+                LinkShareScreen(pickFile = pickFile, pickedFile = pickedFile, onBack = { navController.popBackStack() })
             }
             composable("paywall") {
                 PaywallContent(onDismiss = { navController.popBackStack() })

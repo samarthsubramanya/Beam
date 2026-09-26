@@ -54,6 +54,7 @@ fun HomeScreen(
     onOpenMessage: (Peer) -> Unit,
     onOpenFiles: (Peer) -> Unit,
     filesLocked: Boolean,
+    onShareLink: () -> Unit,
     onOpenSettings: () -> Unit,
     onPairNewDevice: () -> Unit,
     showProPromo: Boolean = false,
@@ -79,6 +80,9 @@ fun HomeScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = onShareLink) {
+                        Icon(Icons.Filled.Share, contentDescription = "Share a link over the internet")
+                    }
                     IconButton(onClick = onOpenSettings) {
                         Icon(Icons.Filled.Settings, contentDescription = "Settings")
                     }
